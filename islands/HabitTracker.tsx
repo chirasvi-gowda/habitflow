@@ -1,48 +1,107 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
+
+interface Habit {
+  id: number;
+  name: string;
+  completed: boolean;
+}
 
 export default function HabitTracker() {
-  const [habits, setHabits] = useState([
-    { name: "Exercise", completed: true },
-    { name: "Read 30 Minutes", completed: false },
-    { name: "Practice TypeScript", completed: false },
-  ]);
-
+  const [habits, setHabits] = useState<Habit[]>([]);
   const [newHabit, setNewHabit] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const addHabit = () => {
-    if (newHabit.trim() === "") return;
+  useEffect(() => {
+    loadHabits();
+  }, []);
 
-    setHabits([
-      ...habits,
-      {
-        name: newHabit,
-        completed: false,
+  async function loadHabits() {
+    try {
+      const response = await fetch("/api/habits");
+
+      if (!response.ok) {
+        throw new Error("Could not load habits.");
+      }
+
+      const data = await response.json() as Habit[];
+      setHabits(data);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addHabit() {
+    const name = newHabit.trim();
+
+    if (name === "") {
+      return;
+    }
+
+    const response = await fetch("/api/habits", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    ]);
+      body: JSON.stringify({
+        name,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Could not add habit.");
+      return;
+    }
 
     setNewHabit("");
-  };
+    await loadHabits();
+  }
 
-  const deleteHabit = (habitToDelete: string) => {
-    setHabits(
-      habits.filter(
-        (habit) => habit.name !== habitToDelete,
-      ),
-    );
-  };
+  async function toggleComplete(habit: Habit) {
+    const response = await fetch("/api/habits", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: habit.id,
+        completed: !habit.completed,
+      }),
+    });
 
-  const toggleComplete = (habitName: string) => {
-    setHabits(
-      habits.map((habit) =>
-        habit.name === habitName
-          ? {
-              ...habit,
-              completed: !habit.completed,
-            }
-          : habit
-      ),
-    );
-  };
+    if (!response.ok) {
+      console.error("Could not update habit.");
+      return;
+    }
+
+    await loadHabits();
+  }
+
+  async function deleteHabit(id: number) {
+    const response = await fetch("/api/habits", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Could not delete habit.");
+      return;
+    }
+
+    await loadHabits();
+  }
+
+  const completedCount = habits.filter(
+    (habit) => habit.completed,
+  ).length;
+
+  const remainingCount = habits.length - completedCount;
 
   return (
     <div class="bg-white p-6 rounded-lg shadow">
@@ -50,11 +109,10 @@ export default function HabitTracker() {
         <input
           type="text"
           value={newHabit}
-          onInput={(e) =>
-            setNewHabit(e.currentTarget.value)
-          }
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
+          onInput={(event) =>
+            setNewHabit(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
               addHabit();
             }
           }}
@@ -63,6 +121,7 @@ export default function HabitTracker() {
         />
 
         <button
+          type="button"
           onClick={addHabit}
           class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
         >
@@ -76,19 +135,11 @@ export default function HabitTracker() {
         </p>
 
         <p class="text-green-600">
-          Completed: {
-            habits.filter(
-              (habit) => habit.completed,
-            ).length
-          }
+          Completed: {completedCount}
         </p>
 
         <p class="text-orange-600">
-          Remaining: {
-            habits.filter(
-              (habit) => !habit.completed,
-            ).length
-          }
+          Remaining: {remainingCount}
         </p>
       </div>
 
@@ -96,33 +147,41 @@ export default function HabitTracker() {
         My Habits
       </h2>
 
-      {habits.map((habit) => (
-        <div class="border p-3 rounded mb-2 flex justify-between items-center">
-          <label class="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={habit.completed}
-              onChange={() =>
-                toggleComplete(habit.name)
-              }
-              class="w-5 h-5"
-            />
-
-            <span>
-              {habit.name}
-            </span>
-          </label>
-
-          <button
-            onClick={() =>
-              deleteHabit(habit.name)
-            }
-            class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+      {loading ? (
+        <p class="text-gray-500">
+          Loading habits...
+        </p>
+      ) : habits.length === 0 ? (
+        <p class="text-gray-500">
+          No habits yet. Add your first habit above!
+        </p>
+      ) : (
+        habits.map((habit) => (
+          <div
+            key={habit.id}
+            class="border p-3 rounded mb-2 flex justify-between items-center"
           >
-            Delete
-          </button>
-        </div>
-      ))}
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={habit.completed}
+                onChange={() => toggleComplete(habit)}
+                class="w-5 h-5"
+              />
+
+              <span>{habit.name}</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => deleteHabit(habit.id)}
+              class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+            >
+              Delete
+            </button>
+          </div>
+        ))
+      )}
     </div>
   );
 }
