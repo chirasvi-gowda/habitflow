@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY . .
 
+RUN deno install --allow-scripts
+
 RUN deno task build
 
 ENV PORT=8080
