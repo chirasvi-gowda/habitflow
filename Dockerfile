@@ -1,11 +1,12 @@
-FROM denoland/deno:2.5.0
+FROM denoland/deno:latest
 
 WORKDIR /app
 
 COPY . .
 
-RUN deno install
 RUN deno task build
+
+ENV PORT=8080
 
 EXPOSE 8080
 
